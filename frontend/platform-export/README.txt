@@ -5,7 +5,8 @@ Files:
   index.html   — shell; mounts the React app on #root
   styles.css   — production CSS bundle (from Vite build)
   bundle.js    — production JS bundle (React app, ES module)
-  favicon.svg  — tab icon
+  favicon-flame-128.png  — tab / apple-touch icon (128×128)
+  flame-icon-no-bg.png   — 32×32; bundle cursor URL if you copy static CSS that references it
 
 Regenerate from the repo (after `npm run build`):
   From frontend/: the built assets live in dist/assets/ with hashed names.

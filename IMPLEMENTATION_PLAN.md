@@ -169,7 +169,8 @@ stranded-asset-warning/          ← monorepo, one Railway project
 │   │   └── config.py                  ← env vars: EIA_API_KEY, DATABASE_URL, ANTHROPIC_API_KEY
 │   └── requirements.txt
 │
-├── railway.toml                       ← Phase 6: Railway config (not in repo until deploy)
+├── backend/railway.toml               ← backend service: build + start (see Railway section)
+├── frontend/railway.toml + Dockerfile ← frontend: DOCKERFILE builder, Node 23
 └── README.md                          ← local setup: env, Postgres, run backend (not duplicated here)
 
 # Separate repository (not part of the monorepo):
@@ -938,10 +939,10 @@ This is the recommended sequence. Each phase should be testable independently.
 34. Error states: deepen beyond Phase 3 baseline (API failures, empty results, loading states are already present for the main table/stats)
 35. Mobile testing and fixes
 36. Projection caveats and data attribution (README / in-app copy as needed — not a global footer)
-37. **Railway:** Create project, add Postgres service, set env vars (`DATABASE_URL` from Railway Postgres, production `CORS_ORIGINS`, `EIA_API_KEY`, etc.)
-38. Deploy frontend + backend services; set frontend `VITE_API_URL` to backend URL
-39. Test full flow on deployed URL
-40. Add admin refresh endpoint with simple auth
+37. **Railway:** **Done (baseline):** project **ProjectBurnout**, services **Postgres**, **backend**, **frontend**; `DATABASE_URL` on backend references Postgres; `CORS_ORIGINS`, `VITE_API_URL`, `EIA_API_KEY` set — see **Railway (production deploy)** below.
+38. **Deploy:** **Done:** frontend uses **`frontend/Dockerfile`** (Node 23) + `frontend/railway.toml` (`builder = DOCKERFILE`); backend deploys from `backend/` with `start.sh` (Alembic + uvicorn). Each service uses **Root directory** `frontend` or `backend` when connected to GitHub.
+39. **Test on deployed URL:** **Partially done** — app loads; **production DB may be empty or out of sync** until EIA pipeline is run successfully against the **same** database the API uses (see handoff / open issues below).
+40. Add admin refresh endpoint with simple auth — **not done** (still manual / SSH / cron).
 
 ### Future Iterations (post-sprint)
 - Map view with React-Leaflet
@@ -979,6 +980,71 @@ VITE_API_URL=http://localhost:8000
 
 ---
 
+## Railway (production deploy)
+
+**Repo:** [ProjectBurnout](https://github.com/abrose1/ProjectBurnout) (public). **In-product name:** Burnout. **Railway project:** ProjectBurnout.
+
+### Services (typical layout)
+
+| Service | Role | Root directory (monorepo) |
+|---------|------|---------------------------|
+| **Postgres** | Managed PostgreSQL | — |
+| **backend** | FastAPI API | `backend` |
+| **frontend** | Static Vite app (Docker + `serve`) | `frontend` |
+
+### Public URLs
+
+- Railway assigns `*.up.railway.app` hostnames per service (custom subdomain editable in the service’s **Settings → Networking / Domains**).
+- **Frontend** is the browser URL users open (e.g. a custom name like `project-burnout.up.railway.app`).
+- **Backend** has its own hostname (e.g. `backend-production-….up.railway.app`); **`VITE_API_URL`** on the frontend service must be the **HTTPS** backend base URL (no trailing slash), set for **build time** so the Vite bundle calls the correct API.
+
+### Config as code (in repo)
+
+- `backend/railway.toml` — Nixpacks/Railpack build; `start.sh` runs `alembic upgrade head` then uvicorn.
+- `frontend/railway.toml` — **`builder = DOCKERFILE`** so the image uses **`frontend/Dockerfile`** (official `node:23-bookworm-slim`; Railway’s default **Railpack** was resolving to **Node 18**, which breaks Vite 8).
+- `frontend/Dockerfile` — multi-stage: `npm ci` → `npm run build` → `serve` on `$PORT`.
+
+### Required Railway variables (summary)
+
+- **Postgres:** plugin provides `DATABASE_URL` / `DATABASE_PUBLIC_URL` (internal vs TCP proxy).
+- **backend:** `DATABASE_URL` should **reference** the Postgres service (e.g. `${{Postgres.DATABASE_URL}}`). **`EIA_API_KEY`** must be set for EIA refresh scripts and debug routes. **`CORS_ORIGINS`** must include the exact frontend origin (e.g. `https://<your-frontend-host>.up.railway.app`). Use a variable reference like `${{frontend.RAILWAY_PUBLIC_DOMAIN}}` with `https://` prefix if supported, or set explicitly. **After changing the frontend public domain, redeploy the backend** so CORS picks up the new origin.
+- **frontend:** **`VITE_API_URL`** = backend public API base URL (often `${{backend.RAILWAY_PUBLIC_DOMAIN}}` with `https://` — confirm pattern in Railway variable UI). Mark as available at **build** time if the UI offers it.
+
+### CLI (from repo root, with [Railway CLI](https://docs.railway.com/guides/cli) installed)
+
+```bash
+railway login
+cd /path/to/StrandedAssets    # monorepo root
+railway link                  # if not already linked to ProjectBurnout
+
+# Deploy manually (uploads current directory; use path-as-root for monorepo)
+railway service backend
+railway up --path-as-root backend
+
+railway service frontend
+railway up --path-as-root frontend
+```
+
+- **`railway service <name>`** selects which service subsequent commands target.
+- **`railway up --path-as-root backend`** (or `frontend`) mirrors setting **Root Directory** in the UI for that service.
+- If the repo is connected to GitHub with auto-deploy, **`git push`** may deploy without `railway up`; avoid doing both for every change or you may double-deploy.
+
+Useful: `railway variables -s backend`, `railway domain`, `railway open` (opens dashboard; may require interactive session).
+
+### Production data load (EIA → Postgres)
+
+Order is the same as local: **inventory → metrics → AEO → projection** (`scripts/refresh_eia_pipeline.sh` runs the four Python modules from `backend/`).
+
+**Gotcha:** `railway run ./scripts/refresh_eia_pipeline.sh` injects the backend service env, but **`DATABASE_URL` uses `postgres.railway.internal`**, which **does not resolve on your laptop**. So a naive `railway run` from your machine fails DB connect unless you override `DATABASE_URL` with **`DATABASE_PUBLIC_URL`** from the Postgres service (TCP proxy). Conversely, writing only via `DATABASE_PUBLIC_URL` from outside **must** target the **same** logical database the backend uses, or the API will still show empty lists.
+
+**Preferred direction for production refresh:** run the pipeline **inside** the running backend container so it uses the same `DATABASE_URL` as uvicorn, e.g. `railway ssh` then from `/app`:
+
+`/opt/venv/bin/python -m app.services.data_refresh` → `metrics_refresh` → `aeo_refresh` → `projection` (long-running; **aeo_refresh** can hit EIA **429** — retries exist; may need spacing or re-run).
+
+**Open issue:** Confirm row counts via internal DB (`railway ssh` + SQL or small Python one-liner) match what `/api/plants` returns; if the UI shows “No plant data” but local loads seemed to succeed, suspect **wrong DB**, **incomplete pipeline**, or **list API filters** (plants without `plant_metrics` are excluded per `plant_visibility`).
+
+---
+
 ## Key Technical Decisions Log
 
 | Decision | Choice | Rationale |
@@ -999,6 +1065,7 @@ VITE_API_URL=http://localhost:8000
 | Coal vs gas frontend | Same table, same projection model | Fuel type drives different price curves and base O&M, no separate logic |
 | MCP packaging | Module in backend + standalone repo | Fast in production, reusable for community |
 | Data refresh | Manual first, cron later | Keeps sprint scope manageable |
+| Railway frontend image | `frontend/Dockerfile` (`node:23-bookworm-slim`) + `railway.toml` `DOCKERFILE` | Default Railpack/Nixpacks picked Node 18; Vite 8 needs newer Node; Dockerfile pins runtime |
 | Design approach | Explicit anti-AI-slop design system | See Design System section — distinctive typography, warm palette, no purple |
 | Plant detail view | **Done** (modal) | `PlantDetailModal` + `GET /api/plants/{id}` + metrics history / sparkline |
 
@@ -1022,3 +1089,4 @@ VITE_API_URL=http://localhost:8000
 10. **Stranded year edge cases**: Some plants may already be past their projected stranded year (they're currently unviable but still operating). Handle this in the UI — show "Already at risk" instead of a past year.
 11. **Projection model credibility**: The model is simple by design. State caveats clearly (README, modal, or future stats strip) — this is an indicative tool, not a financial forecast. Honest framing improves credibility.
 12. **O&M cost data**: EIA publishes average O&M costs by plant type, but these are industry averages, not plant-specific. Acceptable for the prototype — note this in the caveats.
+13. **Railway production DB vs API:** Loading data from a dev machine using **`DATABASE_PUBLIC_URL`** can succeed while the deployed API still shows **no plants** if the backend’s **`DATABASE_URL`** does not point at that same database, or if the refresh did not complete (metrics/AEO/projection). **`railway run`** against the repo from localhost does not resolve **`postgres.railway.internal`** — use SSH on the backend service or a confirmed public URL to the **same** DB the service uses. After changing **frontend domain**, **redeploy backend** so **CORS** updates.
