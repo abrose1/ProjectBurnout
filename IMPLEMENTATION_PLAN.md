@@ -5,8 +5,8 @@
 **In-product name:** **Burnout** (browser tab, masthead). A web dashboard that identifies which US fossil fuel power plants are most at risk of becoming economically unviable before their projected retirement. The headline metric is the **stranded gap** — the difference between when a plant is projected to retire vs. when it's projected to become unprofitable. Users interact via a natural language query bar that filters and explores a ranked table of plants, with a map view planned for iteration 2. Built on EIA data, exposed through a standalone MCP server, deployed on Railway.
 
 **Two deliverables:**
-1. The live web application (Railway-hosted dashboard)
-2. A standalone MCP server for EIA energy data (separate GitHub repo, reusable by others)
+1. The live web application (Railway-hosted dashboard) — **complete:** **[https://project-burnout.up.railway.app](https://project-burnout.up.railway.app)** (Railway project **ProjectBurnout**; backend + Postgres on the same project). Feature-complete for Burnout v1 (table, stats, NL query, detail modal, production deploy).
+2. A standalone MCP server for EIA energy data — **separate GitHub repo** — **shipped:** **[github.com/abrose1/mcp-server-eia](https://github.com/abrose1/mcp-server-eia)** (v1 + expansion wave 1 + **`get_fuel_prices`**: **nine** tools, stdio, `CHANGELOG` / **`v0.3.0`**). **Authoritative technical spec:** **[`eia-mcp-server-plan.md`](eia-mcp-server-plan.md)**. **Next expansion** (same doc): STEO, RTO, composites, etc.; optional PyPI / MCP directories / SSE hosting are separate stretch goals.
 
 ---
 
@@ -36,16 +36,18 @@
 
 **Three Railway services:**
 - **Frontend**: React (Vite), serves static build
-- **Backend (web-service)**: Python FastAPI — hosts REST API, MCP endpoint, Claude API integration, projection engine
+- **Backend (web-service)**: Python FastAPI — REST API, Claude API integration (NL query), projection engine; **optional** in-process MCP endpoint if you add **`backend/app/mcp/`** (not required for the standalone **`mcp-server-eia`** deliverable)
 - **Postgres**: Persistent data store for cached EIA data and computed projections
 
-The MCP module lives inside the backend service but is also packaged as a standalone repo. The backend exposes it at an MCP-compatible endpoint so external clients (Claude Desktop, other agents) can connect.
+The **standalone** MCP is **`mcp-server-eia/`** — a **separate GitHub repository** (not this monorepo). Per **`eia-mcp-server-plan.md`**, v1 uses **stdio** (Claude Desktop, Cursor, etc.); **remote SSE / hosting on Railway** is an optional stretch goal, not required for the deliverable. Implementation **extracts** `eia_client` and aggregation/mapping logic from this backend into that repo; it does **not** use `projection.py` or Postgres.
+
+**Optional later:** an in-process MCP or HTTP endpoint **on the Burnout backend** that exposes **stranded-asset** tools (Postgres-backed, aligned with `/api/plants`) — sketched under **MCP Server — Tool Definitions** below — is separate from the standalone EIA MCP product.
 
 ---
 
 ## Local development (first)
 
-Develop and run the stack on your machine first; **deploy to Railway in Phase 6** when the app is stable.
+Develop and run the stack on your machine first. **Production is on Railway** (see **[Railway (production deploy)](#railway-production-deploy)**). Phase 6 deploy baseline is **done**; ongoing ops are data refresh cadence and optional admin/cron (below).
 
 **Operational details (env vars, Homebrew Postgres, secrets, run commands, data refresh, Cursor hygiene):** see **[README.md](README.md)**. This plan stays focused on architecture and product design; avoid duplicating local-setup prose here.
 
@@ -72,7 +74,7 @@ The following exists in `backend/` and matches this plan’s schema / EIA integr
 | **REST API** | **`GET /api/plants`** — sorting + pagination + filters (fuel / multi-`fuel_types`, single or multi-`states`, `emm_region`, stranded gap min/max, text `ILIKE` fields, year and numeric bounds on plant + projection + latest CF; see **`/docs`**), **`POST /api/query`** (NL → `filters_applied` + message), **`GET /api/plants/{plant_id}`**, **`GET /api/regions`**, **`GET /api/stats`** — Pydantic models in **`app/api_schemas.py`**, routers in **`app/main.py`**. |
 | **REST API — plant filter** | List, detail, stats, and regions **exclude** plants with **no** Form 923 **`plant_metrics`** rows (implementation: **`app/plant_visibility.py`**). |
 | **Sanity check (after refresh)** | Spot-check **`plant_projections`** vs expectations (e.g. old coal, gaps vs retirement fields). |
-| **Debug / health URLs** | `GET /api/debug/eia-ping` — EIA metadata + 2 sample rows (no DB). `GET /api/debug/db-ping` and `GET /health/db` — `SELECT 1` when `DATABASE_URL` works. Interactive API docs: `/docs`. |
+| **Debug / health URLs** | `GET /api/debug/eia-ping` — EIA metadata + 2 sample rows (no DB). `GET /api/debug/db-ping`, **`GET /api/debug/db-summary`** (table row counts — useful after prod refresh), and `GET /health/db` — `SELECT 1` when `DATABASE_URL` works. Interactive API docs: `/docs`. |
 | **Python env** | From `backend/`: `python3 -m venv .venv` then `pip install -r requirements.txt`. |
 
 **Recommended data refresh order (manual):**  
@@ -159,7 +161,7 @@ stranded-asset-warning/          ← monorepo, one Railway project
 │   │   │   ├── aeo_refresh.py         ← AEO tables (fuel, regional prices, renewables)
 │   │   │   ├── projection.py          ← stranded year projection → `plant_projections`
 │   │   │   └── nl_query.py            ← Claude `list_plants` tool + guardrails
-│   │   ├── mcp/                       ← Phase 5: MCP tools + server (not in repo yet)
+│   │   ├── mcp/                       ← Optional: Postgres-backed MCP (not required for standalone EIA MCP)
 │   │   │   ├── server.py
 │   │   │   ├── tools.py
 │   │   │   └── __init__.py
@@ -173,18 +175,13 @@ stranded-asset-warning/          ← monorepo, one Railway project
 ├── frontend/railway.toml + Dockerfile ← frontend: DOCKERFILE builder, Node 23
 └── README.md                          ← local setup: env, Postgres, run backend (not duplicated here)
 
-# Separate repository (not part of the monorepo):
-mcp-server-eia/                        ← SEPARATE GIT REPO, developed independently
-├── src/
-│   ├── server.py
-│   ├── tools.py                       ← same tools, no DB dependency
-│   └── eia_client.py                  ← same EIA client
-├── README.md                          ← usage docs for others
-├── requirements.txt
-└── pyproject.toml
+# Separate repository (not part of the monorepo) — full layout in eia-mcp-server-plan.md:
+mcp-server-eia/                        ← SEPARATE GIT REPO (`src/mcp_server_eia/`, tools package, etc.)
+├── ...
+└── (see Architecture + Build Order in eia-mcp-server-plan.md)
 ```
 
-The standalone `mcp-server-eia/` repo is a separate GitHub repository — it is NOT a subdirectory of the monorepo. It shares the same tool logic and EIA client code but has no database dependency. During development, build the MCP tools inside `backend/app/mcp/` first, then copy the relevant code to the standalone repo in Phase 5.
+The standalone **`mcp-server-eia/`** repo is a separate GitHub repository — **not** a subdirectory of the monorepo. It ships the **EIA-first** tools and **stdio** MCP process described in **`eia-mcp-server-plan.md`**. It reuses **`eia_client`** and extraction from refresh modules; **no** `DATABASE_URL`. **Optional:** add **`backend/app/mcp/`** here only if you want a **second** MCP surface backed by Postgres (stranded metrics).
 
 ---
 
@@ -730,7 +727,7 @@ STRICT RULES:
 
 ## MCP Server — Tool Definitions
 
-These tools are exposed via the MCP protocol. They're used both internally by the backend and externally by any MCP client.
+**Scope note:** The JSON below describes tools aligned with **`nl_query.py`** / **`POST /api/query`** (structured filters + stranded metrics from **Postgres**). They are **not** the same as the **standalone `mcp-server-eia`** tool set in **`eia-mcp-server-plan.md`** (`search_power_plants`, `get_plant_profile`, AEO/SEDS helpers, etc. — **EIA API only**, no projection). If you add a **DB-backed MCP** inside the backend later, these shapes are the reference; the **standalone GitHub MCP** follows the technical plan doc.
 
 ### Tool: `list_plants`
 
@@ -788,8 +785,9 @@ These tools are exposed via the MCP protocol. They're used both internally by th
 }
 ```
 
-### Standalone MCP Repo Differences
-The standalone `mcp-server-eia/` version calls EIA APIs directly (no database). It's stateless — every tool call hits the EIA API. This makes it simple to run but slower. The backend-integrated version reads from Postgres for speed.
+### Standalone `mcp-server-eia/` (separate repo)
+
+See **`eia-mcp-server-plan.md`**: domain-aware tools, **no** `DATABASE_URL`, **stdio** v1, code lifted from `eia_client` / refresh modules without DB writes. **Optional** future: a **Postgres-backed** MCP in this monorepo would read cached projections for speed and parity with the dashboard — different tools than the standalone EIA server.
 
 ---
 
@@ -889,7 +887,7 @@ This is the recommended sequence. Each phase should be testable independently.
 
 **Status in repo:** Steps 1–4 and 5–7 are done as separate modules: `eia_client.py`, `data_refresh.py`, `metrics_refresh.py`, `aeo_refresh.py`, **`projection.py`** (see **Backend — implemented so far**). Run order: data_refresh → metrics_refresh → aeo_refresh → **projection**. REST **`/api/plants`**, **`/api/regions`**, **`/api/stats`** are implemented (see **Backend — implemented so far**).
 
-**Railway (later):** In Phase 6, provision Railway Postgres and point `DATABASE_URL` / `CORS_ORIGINS` / `VITE_API_URL` at deployed URLs — same env vars as local, different values.
+**Railway (production):** **Done** — Postgres + backend + frontend in project **ProjectBurnout**; env vars match local names with production values. **Dashboard:** [https://project-burnout.up.railway.app](https://project-burnout.up.railway.app). Details: **[Railway (production deploy)](#railway-production-deploy)**.
 
 ### Phase 2: Projection Engine (Day 1 afternoon)
 8. Implement `projection.py` with the unified economic model (cost side + revenue side) — **done**
@@ -927,29 +925,50 @@ This is the recommended sequence. Each phase should be testable independently.
 26. Wire up: query → Claude → tool calls → structured filters → table update — **done**
 27. Test guardrails — **iterate** as needed
 
-### Phase 5: MCP Server (Day 2 afternoon)
-28. Implement MCP tools in `backend/app/mcp/tools.py`
-29. Set up MCP server endpoint in FastAPI
-30. Test with MCP inspector or Claude Desktop
-31. Copy MCP logic to standalone `mcp-server-eia/` repo
-32. Write README with setup instructions for standalone usage
+### Phase 5: Standalone EIA MCP (`mcp-server-eia/`) — **v1 + expansion wave 1 + `get_fuel_prices` shipped**
+
+**Deliverable:** **[github.com/abrose1/mcp-server-eia](https://github.com/abrose1/mcp-server-eia)** — nine tools (v1 six + **`get_generation_mix`**, **`get_capacity_by_fuel`**, **`get_fuel_prices`**), stdio (**FastMCP**), **`scripts/smoke_eia.py`**, **`pytest`**, CI, **`CHANGELOG`**, tagged releases **`v0.1.0`** / **`v0.2.0`** / **`v0.3.0`**. Spec and history: **[`eia-mcp-server-plan.md`](eia-mcp-server-plan.md)**.
+
+28–31. **Done** — repo created, logic extracted from **`eia_client`** / refresh modules (no **`projection.py`** / DB), tools + README + license + CI; **cross-link** in this repo’s **`README.md`** (documentation map).
+
+**Next (in the standalone repo only):** remaining expansion routes in **`eia-mcp-server-plan.md`** (natural gas, STEO, RTO, etc.). Optional: **PyPI**, MCP **directory** listings, **SSE** hosting — see that doc’s stretch goals.
+
+**Optional (not required for deliverable 2):** prototype **`backend/app/mcp/`** or a FastAPI MCP route using **Postgres** and the tool shapes in **MCP Server — Tool Definitions** below.
 
 ### Phase 6: Polish & Deploy (Day 2 evening)
-33. Visual polish: table density, typography, loading animations; tune stranded-gap text contrast if needed
-34. Error states: deepen beyond Phase 3 baseline (API failures, empty results, loading states are already present for the main table/stats)
-35. Mobile testing and fixes
-36. Projection caveats and data attribution (README / in-app copy as needed — not a global footer)
+
+**Burnout website / dashboard v1:** **complete** (signed off). Further visual or UX iteration is optional.
+
+33. Visual polish: table density, typography, loading animations; tune stranded-gap text contrast if needed — **done (v1)**
+34. Error states: deepen beyond Phase 3 baseline (API failures, empty results, loading states are already present for the main table/stats) — **done (v1)**
+35. Mobile testing and fixes — **done (v1)**
+36. Projection caveats and data attribution (README / in-app copy as needed — not a global footer) — **done (v1)**
 37. **Railway:** **Done (baseline):** project **ProjectBurnout**, services **Postgres**, **backend**, **frontend**; `DATABASE_URL` on backend references Postgres; `CORS_ORIGINS`, `VITE_API_URL`, `EIA_API_KEY` set — see **Railway (production deploy)** below.
 38. **Deploy:** **Done:** frontend uses **`frontend/Dockerfile`** (Node 23) + `frontend/railway.toml` (`builder = DOCKERFILE`); backend deploys from `backend/` with `start.sh` (Alembic + uvicorn). Each service uses **Root directory** `frontend` or `backend` when connected to GitHub.
-39. **Test on deployed URL:** **Partially done** — app loads; **production DB may be empty or out of sync** until EIA pipeline is run successfully against the **same** database the API uses (see handoff / open issues below).
-40. Add admin refresh endpoint with simple auth — **not done** (still manual / SSH / cron).
+39. **Test on deployed URL:** **Done** — **[https://project-burnout.up.railway.app](https://project-burnout.up.railway.app)** loads with full data after running the EIA pipeline (**inventory → metrics → AEO → projection**) against the **same** Postgres the API uses (prefer `railway ssh` on the backend service; see **Production data load** below). Verify with `GET /api/stats`, `GET /api/plants`, and optionally **`scripts/verify_railway_api.sh`** (`API_BASE_URL` = backend HTTPS origin).
+40. Add admin refresh endpoint with simple auth — **not done** (production refresh still **manual** via SSH or override; **Railway cron** is an alternative).
+41. **Basic product analytics / logging** — **done:** **`analytics_visits`**, **`analytics_queries`** (migrations **`003_analytics`**, **`004_analytics_plaintext`** upgrades legacy hash-only tables); **`query_text`** (user input), **`nl_message`** (NL interpretation shown in UI), **`filters_applied_json`** (structured filters) — **not encrypted**; protect DB access / retention in policy.
 
 ### Future Iterations (post-sprint)
+- **MCP (standalone):** v1 + expansion wave 1 + **`get_fuel_prices`** **shipped** — **[`mcp-server-eia` on GitHub](https://github.com/abrose1/mcp-server-eia)** (**`v0.3.0`**). **Next:** further expansion in **`eia-mcp-server-plan.md`**; optional PyPI / mcp.so / Smithery / SSE per that doc. Optional: Postgres-backed MCP in the backend using **MCP Server — Tool Definitions** below.
+- **Analytics:** rollups / dashboards / retention jobs as needed (baseline logging done — see **Product analytics and logging**)
 - Map view with React-Leaflet
 - Cron job for automatic data refresh (Railway cron or external)
 - Rich plant detail (e.g. projection chart) if not fully covered in Phase 3
 - Carbon pricing cost adder (v2 — adds a $/MWh cost term to the projection model)
-- Publish standalone MCP to mcp.so / Smithery
+
+### Product analytics and logging
+
+**Status:** Implemented. **`analytics_queries`** stores **plain text** — what the user typed (**`query_text`**), the NL interpretation string returned to the UI (**`nl_message`**), and **`filters_applied_json`** (sorted JSON of structured filters). This is **not encryption** (an earlier hash-only column was replaced by **`004_analytics_plaintext`** on legacy DBs). Restrict database access and define retention if your privacy posture requires it.
+
+**Visitor identity (anonymous):** **`X-Visitor-Id`** — UUID in **`localStorage`**, validated in **`app/services/analytics_log.py`**.
+
+**Endpoints:** **`POST /api/analytics/visit`** (`app_load` once per tab session from **`App.jsx`**), **`POST /api/query`** appends a row via **`BackgroundTasks`** when **`X-Visitor-Id`** is present.
+
+**Privacy & compliance (basics):**
+
+- The **visitor id** is pseudonymous; **`query_text`** is user-entered content — treat like other PII-adjacent data (access control, retention).
+- Revisit retention (e.g. aggregate or delete rows older than N months) if storage grows.
 
 ---
 
@@ -966,23 +985,34 @@ EIA_API_KEY=...                      # From EIA registration — use .env only
 ANTHROPIC_API_KEY=...                # For Claude API (NL query)
 ADMIN_KEY=...                        # Simple secret for admin endpoints
 
-# Local: Vite default origin. Production: your Railway frontend URL
+# Local: Vite default origin. Production: exact frontend origin (CORS)
 CORS_ORIGINS=http://localhost:5173
+# Production example:
+# CORS_ORIGINS=https://project-burnout.up.railway.app
 ```
 
 ### Frontend
 ```
 # Local:
 VITE_API_URL=http://localhost:8000
-# Production (Railway):
-# VITE_API_URL=https://your-backend.up.railway.app
+# Production (Railway): backend’s public HTTPS base (no trailing slash). Railway gives the backend its own *.up.railway.app host — copy from the backend service → Networking, or use a variable reference in Railway.
+# Example pattern:
+# VITE_API_URL=https://backend-production-xxxx.up.railway.app
 ```
 
 ---
 
 ## Railway (production deploy)
 
-**Repo:** [ProjectBurnout](https://github.com/abrose1/ProjectBurnout) (public). **In-product name:** Burnout. **Railway project:** ProjectBurnout.
+**Repo:** [ProjectBurnout](https://github.com/abrose1/ProjectBurnout) (public). **In-product name:** Burnout. **Railway project:** **ProjectBurnout**.
+
+### Production URLs (canonical)
+
+| What | URL / note |
+|------|------------|
+| **Dashboard (users)** | **[https://project-burnout.up.railway.app](https://project-burnout.up.railway.app)** |
+| **Backend API** | Separate Railway hostname (e.g. `https://backend-production-….up.railway.app`) — use for **`VITE_API_URL`**, `curl`, and **`scripts/verify_railway_api.sh`**. OpenAPI: `/docs`. |
+| **Postgres** | Not public; reachable from backend via Railway **`DATABASE_URL`** (internal) or **`DATABASE_PUBLIC_URL`** for off-platform tools (confirm same DB as the backend service). |
 
 ### Services (typical layout)
 
@@ -992,11 +1022,11 @@ VITE_API_URL=http://localhost:8000
 | **backend** | FastAPI API | `backend` |
 | **frontend** | Static Vite app (Docker + `serve`) | `frontend` |
 
-### Public URLs
+### Public hostnames (detail)
 
-- Railway assigns `*.up.railway.app` hostnames per service (custom subdomain editable in the service’s **Settings → Networking / Domains**).
-- **Frontend** is the browser URL users open (e.g. a custom name like `project-burnout.up.railway.app`).
-- **Backend** has its own hostname (e.g. `backend-production-….up.railway.app`); **`VITE_API_URL`** on the frontend service must be the **HTTPS** backend base URL (no trailing slash), set for **build time** so the Vite bundle calls the correct API.
+- Railway assigns `*.up.railway.app` per service (custom names in **Settings → Networking / Domains**).
+- **Frontend** public app: **`project-burnout.up.railway.app`** (see table above).
+- **Backend** has its **own** hostname; **`CORS_ORIGINS`** on the backend must include **`https://project-burnout.up.railway.app`**. **`VITE_API_URL`** on the frontend must be the backend **HTTPS** base URL (no trailing slash), **build-time**, so the bundle calls the correct API. **Redeploy backend** after changing the frontend public domain so CORS stays aligned.
 
 ### Config as code (in repo)
 
@@ -1007,7 +1037,7 @@ VITE_API_URL=http://localhost:8000
 ### Required Railway variables (summary)
 
 - **Postgres:** plugin provides `DATABASE_URL` / `DATABASE_PUBLIC_URL` (internal vs TCP proxy).
-- **backend:** `DATABASE_URL` should **reference** the Postgres service (e.g. `${{Postgres.DATABASE_URL}}`). **`EIA_API_KEY`** must be set for EIA refresh scripts and debug routes. **`CORS_ORIGINS`** must include the exact frontend origin (e.g. `https://<your-frontend-host>.up.railway.app`). Use a variable reference like `${{frontend.RAILWAY_PUBLIC_DOMAIN}}` with `https://` prefix if supported, or set explicitly. **After changing the frontend public domain, redeploy the backend** so CORS picks up the new origin.
+- **backend:** `DATABASE_URL` should **reference** the Postgres service (e.g. `${{Postgres.DATABASE_URL}}`). **`EIA_API_KEY`** must be set for EIA refresh scripts and debug routes. **`CORS_ORIGINS`** must include the exact frontend origin — production uses **`https://project-burnout.up.railway.app`** (or a variable reference like `${{frontend.RAILWAY_PUBLIC_DOMAIN}}` with `https://` if supported). **After changing the frontend public domain, redeploy the backend** so CORS picks up the new origin.
 - **frontend:** **`VITE_API_URL`** = backend public API base URL (often `${{backend.RAILWAY_PUBLIC_DOMAIN}}` with `https://` — confirm pattern in Railway variable UI). Mark as available at **build** time if the UI offers it.
 
 ### CLI (from repo root, with [Railway CLI](https://docs.railway.com/guides/cli) installed)
@@ -1041,7 +1071,9 @@ Order is the same as local: **inventory → metrics → AEO → projection** (`s
 
 `/opt/venv/bin/python -m app.services.data_refresh` → `metrics_refresh` → `aeo_refresh` → `projection` (long-running; **aeo_refresh** can hit EIA **429** — retries exist; may need spacing or re-run).
 
-**Open issue:** Confirm row counts via internal DB (`railway ssh` + SQL or small Python one-liner) match what `/api/plants` returns; if the UI shows “No plant data” but local loads seemed to succeed, suspect **wrong DB**, **incomplete pipeline**, or **list API filters** (plants without `plant_metrics` are excluded per `plant_visibility`).
+**Verification:** After refresh, confirm **`GET /api/stats`** and **`GET /api/plants`** on the **backend** public URL show totals, **`last_projection_computed`**, and per-row **`projection`** fields (stranded gap, **$/MWh**). **`GET /api/debug/db-summary`** (after deploy) lists table row counts. **`scripts/verify_railway_api.sh`** curls health, stats, and a sample plant list (`API_BASE_URL` = backend origin).
+
+**Troubleshooting:** If the UI shows “No plant data” or missing stranded columns, suspect **wrong DB**, **incomplete pipeline** (e.g. **metrics** or **projection** not run), or **list filters** (plants without `plant_metrics` are excluded per `plant_visibility`).
 
 ---
 
@@ -1063,9 +1095,10 @@ Order is the same as local: **inventory → metrics → AEO → projection** (`s
 | Regional mapping | **`emm_region`** is the AEO/EMM axis (`plants` + regional tables) | Wholesale + renewables are EMM-keyed; **`projection.py`** assigns plant → EMM (or fallback) |
 | Carbon pricing | Named as v2 extension point in projection model | Would be a cost adder per MWh — clear where it goes |
 | Coal vs gas frontend | Same table, same projection model | Fuel type drives different price curves and base O&M, no separate logic |
-| MCP packaging | Module in backend + standalone repo | Fast in production, reusable for community |
+| MCP packaging | **Standalone [`mcp-server-eia`](https://github.com/abrose1/mcp-server-eia)** (stdio, **nine** tools **`v0.3.0`**); further expansion + PyPI/SSE in **`eia-mcp-server-plan.md`**; optional **backend `app/mcp/`** for Postgres-backed stranded tools | EIA MCP is reusable without Burnout DB; backend MCP is optional |
 | Data refresh | Manual first, cron later | Keeps sprint scope manageable |
 | Railway frontend image | `frontend/Dockerfile` (`node:23-bookworm-slim`) + `railway.toml` `DOCKERFILE` | Default Railpack/Nixpacks picked Node 18; Vite 8 needs newer Node; Dockerfile pins runtime |
+| Production dashboard URL | [project-burnout.up.railway.app](https://project-burnout.up.railway.app) (Railway **ProjectBurnout**) | User-facing Burnout app; backend has a separate `*.up.railway.app` host for API + `VITE_API_URL` |
 | Design approach | Explicit anti-AI-slop design system | See Design System section — distinctive typography, warm palette, no purple |
 | Plant detail view | **Done** (modal) | `PlantDetailModal` + `GET /api/plants/{id}` + metrics history / sparkline |
 
