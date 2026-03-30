@@ -17,3 +17,4 @@ frontend/dist/
 
 # Cursor / local debug
 .cursor/*.log
+.railway-build-log.txt
