@@ -197,10 +197,11 @@ body {
     line-height: 1.28;
   }
 
+  /* Body copy — keep at or above ~0.9rem so the paragraph stays comfortable on small phones */
   .masthead__lede {
     margin-top: 0.45rem;
-    font-size: 0.86rem;
-    line-height: 1.42;
+    font-size: clamp(0.9rem, 3.2vw, 1rem);
+    line-height: 1.5;
   }
 }
 
@@ -1706,7 +1707,7 @@ textarea.query-bar__input {
     .layout {
       /* `cursor: url()` uses the bitmap’s pixel size on screen — there’s no separate “display size”.
          Use a 32×32 (or OS max) file; export down from a high-res master for sharpness. */
-      cursor: url("../assets/flame-icon-no-bg.png") 16 32, auto;
+      cursor: url("/flame-icon-no-bg.png") 16 32, auto;
     }
 
     .layout button,
