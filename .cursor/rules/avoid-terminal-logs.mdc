@@ -1,0 +1,20 @@
+---
+description: Do not read IDE terminal capture files unless debugging a specific command
+alwaysApply: true
+---
+
+# Terminal logs and `terminals/` files
+
+- **Do not** read files under the Cursor **terminals** folder (e.g. `terminals/*.txt`) or otherwise pull in full terminal scrollback **by default**.
+- Terminal captures often contain **very long lines** (e.g. HTTP URLs with huge query strings, API keys) and burn context without adding proportional value.
+
+## When reading terminals is OK
+
+- The user **explicitly** asks to inspect terminal output, or
+- You are **debugging a specific failure** where the traceback, exit code, or last few lines of output are essential and cannot be obtained another way.
+
+## Preferred alternatives
+
+- Run a **short, targeted** command and use only the **minimal** output needed (or summarize it yourself).
+- For “did the job succeed?” or data checks, prefer **code**, **tests**, **DB queries**, or **structured logs** over raw terminal files.
+- If you only need metadata (cwd, last command, exit code), read **only the first ~10 lines** of a terminal file if the tool exposes that—**not** the full HTTP trace.

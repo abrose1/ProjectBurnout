@@ -1,0 +1,10 @@
+---
+description: Project handoffs are short copy-paste messages, not new markdown files
+alwaysApply: true
+---
+
+# Handoffs for the next person
+
+- When the user asks for a **handoff** (or similar: “what’s done / what’s next for the next dev”), respond with a **brief message in chat** they can **copy and paste** — bullet or short paragraphs are fine.
+- **Do not** create **`HANDOFF.md`**, **`CONTRIBUTING-handoff.md`**, or other handoff-specific repo files unless the user **explicitly** asks for a file.
+- Point to existing docs for depth: **`README.md`** (run/setup), **`IMPLEMENTATION_PLAN.md`** (architecture, phases, API). Optional: **`/docs`** for the API when the backend is running.
