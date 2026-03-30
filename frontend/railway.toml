@@ -1,6 +1,6 @@
 [build]
-builder = "nixpacks"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
-[deploy]
-# VITE_API_URL must be set in Railway (same value as your public backend URL, no trailing slash).
-startCommand = "npx --yes serve@14 dist -s -l tcp://0.0.0.0:$PORT"
+# Runtime uses Dockerfile CMD (serve). VITE_API_URL must be set for the frontend service
+# (build-time for Vite); use the same value as your public backend URL, no trailing slash.

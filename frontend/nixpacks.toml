@@ -1,4 +1,0 @@
-# Pin major Node for Nixpacks (Railway). Node 23 satisfies Vite 8's engines (>=22.12.0).
-# https://nixpacks.com/docs/providers/node
-[variables]
-NIXPACKS_NODE_VERSION = "23"
