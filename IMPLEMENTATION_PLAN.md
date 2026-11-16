@@ -718,9 +718,8 @@ STRICT RULES:
 ```
 
 ### Guardrail Implementation
-- Claude API call uses `claude-haiku-4-5-20251001` for cost (Haiku 4.5; structured translation, not open-ended reasoning)
+- Claude API call uses `claude-haiku-5-5` with `thinking={"type": "disabled"}` and `output_config={"effort": "low"}` for low latency and cost (Haiku 5.5; structured translation, not open-ended reasoning)
 - Max tokens: 1024 (tool call + interpretation `message`; cap matches `nl_query.py`)
-- Temperature: 0 (deterministic structured output)
 - If Claude API fails, fall back to showing all plants sorted by stranded gap with a message: "Showing all plants by stranded gap. Try a specific query like 'coal plants in Ohio with the biggest risk.'"
 
 ---
@@ -1101,7 +1100,7 @@ Order is the same as local: **inventory → metrics → AEO → projection** (`s
 | Revenue assumption | EIA AEO regional wholesale price projections | Same source as fuel prices, avoids real-time LMP complexity |
 | Retirement estimate | EIA planned if available, else age-based default (45yr coal, 30yr gas) | Labeled "Projected Retirement" to avoid overpromising |
 | AI integration | NL query bar via Claude API | Not a chat — single input translates to structured DB queries |
-| Claude model for NL | claude-haiku-4-5-20251001 | Lower cost than Sonnet; sufficient for structured query translation |
+| Claude model for NL | claude-haiku-5-5 (thinking disabled, low effort) | Lower cost and faster output than Sonnet / Haiku 4.5; sufficient for structured query translation |
 | Regional mapping | **`emm_region`** is the AEO/EMM axis (`plants` + regional tables) | Wholesale + renewables are EMM-keyed; **`projection.py`** assigns plant → EMM (or fallback) |
 | Carbon pricing | Named as v2 extension point in projection model | Would be a cost adder per MWh — clear where it goes |
 | Coal vs gas frontend | Same table, same projection model | Fuel type drives different price curves and base O&M, no separate logic |

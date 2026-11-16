@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 import json
 import re
 from typing import Any
@@ -130,6 +131,7 @@ LIST_PLANTS_TOOL: dict[str, Any] = {
         },
         "required": ["message"],
     },
+    "cache_control": {"type": "ephemeral"},
 }
 
 SYSTEM_PROMPT = """You are the query interpreter for a Stranded Asset Early Warning dashboard. Your ONLY job is to \
@@ -394,6 +396,11 @@ def _coerce_tool_input(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+@lru_cache(maxsize=2)
+def _get_client(api_key: str) -> Anthropic:
+    return Anthropic(api_key=api_key)
+
+
 def run_nl_query(user_text: str) -> dict[str, Any]:
     """
     Returns a dict:
@@ -409,7 +416,8 @@ def run_nl_query(user_text: str) -> dict[str, Any]:
             "fallback": False,
         }
 
-    if not settings.anthropic_api_key.strip():
+    api_key = settings.anthropic_api_key.strip()
+    if not api_key:
         return {
             "filters_applied": {
                 "fuel_type": "all",
@@ -423,12 +431,14 @@ def run_nl_query(user_text: str) -> dict[str, Any]:
             "fallback": True,
         }
 
-    client = Anthropic(api_key=settings.anthropic_api_key)
+    client = _get_client(api_key)
 
     try:
         msg = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-haiku-5-5",
             max_tokens=1024,
+            thinking={"type": "disabled"},
+            output_config={"effort": "low"},
             system=SYSTEM_PROMPT,
             tools=[LIST_PLANTS_TOOL],
             messages=[{"role": "user", "content": text}],
