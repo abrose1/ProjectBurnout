@@ -2,14 +2,14 @@ import { useEffect } from "react";
 
 /**
  * Click ember burst on .layout (terracotta + coal particles).
- * Flame cursor is CSS on .layout (see global.css). Disabled for coarse pointers
- * and prefers-reduced-motion. Skips input, textarea, and select.
+ * Flame cursor is CSS on .layout (see global.css) — mouse/trackpad only.
+ * Tap burst runs on touch too; lighter particle count on coarse pointers.
+ * Skips when prefers-reduced-motion. Skips input, textarea, and select.
  */
 export function CursorFx() {
   useEffect(() => {
     const mqMove = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const mqFine = window.matchMedia("(hover: hover) and (pointer: fine)");
-    if (mqMove.matches || !mqFine.matches) {
+    if (mqMove.matches) {
       return undefined;
     }
 
@@ -49,7 +49,10 @@ export function CursorFx() {
           "color-mix(in srgb, var(--color-coal) 52%, var(--color-terracotta))",
         ];
 
-        const count = 8 + Math.floor(Math.random() * 5);
+        const coarse = window.matchMedia("(pointer: coarse)").matches;
+        const count = coarse
+          ? 5 + Math.floor(Math.random() * 3)
+          : 8 + Math.floor(Math.random() * 5);
 
         for (let i = 0; i < count; i += 1) {
           const el = document.createElement("div");

@@ -1057,6 +1057,8 @@ railway up --path-as-root frontend
 
 - **`railway service <name>`** selects which service subsequent commands target.
 - **`railway up --path-as-root backend`** (or `frontend`) mirrors setting **Root Directory** in the UI for that service.
+- **Do not** run `cd backend && railway up`. The CLI archives from the *linked project directory* (the repo root), not your cwd, so Railpack sees the whole monorepo, finds no app, and the deploy fails with "Railpack could not determine how to build the app" (the previous deployment keeps serving). Always run from the repo root with `--path-as-root`.
+- `railway logs --build` with no deployment ID shows the last *successful* build, not a failed one. To debug a failed deploy, open the build log from the dashboard or pass its deployment ID.
 - If the repo is connected to GitHub with auto-deploy, **`git push`** may deploy without `railway up`; avoid doing both for every change or you may double-deploy.
 
 Useful: `railway variables -s backend`, `railway domain`, `railway open` (opens dashboard; may require interactive session).

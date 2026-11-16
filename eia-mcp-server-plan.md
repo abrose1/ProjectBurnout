@@ -14,7 +14,7 @@ A standalone MCP server that gives any AI agent (Claude Desktop, Cursor, Claude 
 |--|--|
 | **Repository** | **[github.com/abrose1/mcp-server-eia](https://github.com/abrose1/mcp-server-eia)** (public). Tagged releases (**`v0.3.0`**, **`v0.2.0`**, **`v0.1.0`**), **CHANGELOG**, **MIT** license. |
 | **Runtime** | Python **`mcp`** SDK (**FastMCP**), **`httpx`**; **stdio** MCP. **`EIA_API_KEY`** supplied by the MCP host (**`env`** in Cursor / Claude config) or shell. |
-| **Shipped** | **Nine** tools (v1 six + **`get_generation_mix`**, **`get_capacity_by_fuel`**, **`get_fuel_prices`**), standard **`{ data, meta }`** envelope, **`scripts/smoke_eia.py`** (live API check), **`pytest`**, GitHub Actions (unit tests only). Tag **`v0.3.0`**. |
+| **Shipped** | **Ten** tools (v1 six + **`get_generation_mix`**, **`get_capacity_by_fuel`**, **`get_fuel_prices`**, **`get_steo_forecast`**), standard **`{ data, meta }`** envelope, **`scripts/smoke_eia.py`** (live API check), **`pytest`**, GitHub Actions (unit tests only). Tag **`v0.3.0`**. |
 | **Spec location** | This file (`eia-mcp-server-plan.md`) stays in the **StrandedAssets** monorepo as the technical spec; **source code does not live here** — edit **[mcp-server-eia](https://github.com/abrose1/mcp-server-eia)** only. |
 
 ## Supplying `EIA_API_KEY` (for live EIA calls)
@@ -486,7 +486,7 @@ Returns: Array of { period, price, unit }
 ```
 Routes: `natural-gas/pri/fut`, `natural-gas/pri/sum`, `coal/market-sales-price`, `petroleum/pri/spt`
 
-Example natural-language prompts:
+`Example natural-language prompts:
 
 - "Henry Hub natural gas spot prices for 2024 by month"
 - "Citygate natural gas prices (U.S.) for 2022 monthly"

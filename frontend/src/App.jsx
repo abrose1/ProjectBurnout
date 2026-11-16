@@ -1,16 +1,21 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { CursorFx } from "./components/CursorFx";
 import { Layout } from "./components/Layout";
 import { PlantTable } from "./components/PlantTable";
 import { QueryBar } from "./components/QueryBar";
 import { useStats } from "./hooks/useStats";
 import { DEFAULT_PLANT_FILTERS } from "./utils/plantFilters";
+import { recordAppLoadVisit } from "./utils/api";
 
 function App() {
   const { stats, loading: statsLoading, error: statsError, refetch: refetchStats } =
     useStats();
   const [filters, setFilters] = useState(() => ({ ...DEFAULT_PLANT_FILTERS }));
   const [nlBanner, setNlBanner] = useState(null);
+
+  useEffect(() => {
+    void recordAppLoadVisit();
+  }, []);
 
   const onNlMessage = useCallback((msg, opts) => {
     if (msg == null) {

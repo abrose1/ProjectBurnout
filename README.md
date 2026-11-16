@@ -4,6 +4,8 @@ Early-warning tooling for US coal and gas power plants at risk of stranding befo
 
 **Disclaimer:** Data comes from the US Energy Information Administration. Projections in the app are **illustrative**, not investment advice or a financial forecast. See **Projection Caveats** in the implementation plan for modeling limits.
 
+**Analytics:** the app sends a random **`X-Visitor-Id`** (UUID in **`localStorage`**) and logs **`app_load`** plus each natural-language search: **plain-text** user input, NL interpretation, and JSON filters in Postgres (**`analytics_queries`**). This is **not encrypted** — restrict DB access. See **Product analytics and logging** in the implementation plan.
+
 ## Prerequisites
 
 - Python 3.11+ (project uses a `backend/.venv`)
@@ -14,7 +16,6 @@ Early-warning tooling for US coal and gas power plants at risk of stranding befo
 
 1. Copy **`backend/.env.example`** → **`backend/.env`**.
 2. Set secrets only in **`backend/.env`**. **Do not commit `.env`** or paste API keys into issues, PRs, or the implementation plan.
-3. If a key was ever committed, rotate it in the provider’s portal (EIA, Anthropic, etc.).
 
 | Variable | Purpose |
 |----------|---------|
@@ -76,3 +77,6 @@ Or run the Python modules in order from `backend/` (see **IMPLEMENTATION_PLAN.md
 |-----|----------|
 | **This README** | Local setup, env, Postgres, run commands |
 | **[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)** | Architecture, schema, API design, UI, build order, deployment |
+| **[docs/EIA_DATA_PIPELINE.md](docs/EIA_DATA_PIPELINE.md)** | How EIA API pulls feed Postgres, metrics, AEO, and projections (MCP / onboarding reference) |
+| **[eia-mcp-server-plan.md](eia-mcp-server-plan.md)** | Spec for the **standalone** EIA MCP (separate repo — not this monorepo) |
+| **[mcp-server-eia on GitHub](https://github.com/abrose1/mcp-server-eia)** | **Shipped** MCP server: stdio tools for plants, **generation mix**, **capacity by fuel**, EIA prices, AEO, SEDS CO₂ — clone/install per **its** README. **Next** in **`eia-mcp-server-plan.md`**: optional expansion (natural gas, STEO, RTO, etc.). |

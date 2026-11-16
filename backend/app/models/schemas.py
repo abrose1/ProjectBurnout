@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import Float, ForeignKey, Integer, String, Text
+from sqlalchemy import BigInteger, Boolean, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.database import Base
@@ -104,3 +104,29 @@ class RefreshLog(Base):
     status: Mapped[str] = mapped_column(String(32), default="in_progress")
     plant_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class AnalyticsVisit(Base):
+    __tablename__ = "analytics_visits"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    visitor_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    occurred_at: Mapped[datetime] = mapped_column(nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    user_agent_snippet: Mapped[str | None] = mapped_column(String(256), nullable=True)
+
+
+class AnalyticsQuery(Base):
+    """Stores raw NL input and model output for product analytics (not encrypted)."""
+
+    __tablename__ = "analytics_queries"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    visitor_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    occurred_at: Mapped[datetime] = mapped_column(nullable=False, index=True)
+    query_text: Mapped[str] = mapped_column(Text, nullable=False)
+    nl_message: Mapped[str] = mapped_column(Text, nullable=False)
+    filters_applied_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ok: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    status_code: Mapped[int] = mapped_column(Integer, nullable=False)
+    fallback: Mapped[bool | None] = mapped_column(Boolean, nullable=True)

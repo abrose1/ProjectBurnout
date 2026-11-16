@@ -1,3 +1,12 @@
+import { getOrCreateVisitorId } from "./visitorId.js";
+
+/** @returns {Record<string, string>} */
+function visitorHeaders() {
+  const vid = getOrCreateVisitorId();
+  if (!vid) return {};
+  return { "X-Visitor-Id": vid };
+}
+
 /**
  * @param {string} path e.g. "/api/plants"
  * @param {Record<string, string | number | boolean | undefined | null>} [params]
@@ -32,7 +41,7 @@ export async function apiGet(path, params = {}) {
   }
   const q = qs.toString();
   const url = `${base}${path.startsWith("/") ? path : `/${path}`}${q ? `?${q}` : ""}`;
-  const res = await fetch(url);
+  const res = await fetch(url, { headers: { ...visitorHeaders() } });
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || `${res.status} ${res.statusText}`);
@@ -54,7 +63,10 @@ export async function apiPost(path, body) {
   const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...visitorHeaders(),
+    },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -62,4 +74,22 @@ export async function apiPost(path, body) {
     throw new Error(text || `${res.status} ${res.statusText}`);
   }
   return res.json();
+}
+
+const APP_LOAD_SESSION_KEY = "burnout_app_load_logged";
+
+/** Record one app_load event per browser tab session (best-effort). */
+export async function recordAppLoadVisit() {
+  try {
+    if (!getApiBase()) return;
+    if (typeof sessionStorage !== "undefined" && sessionStorage.getItem(APP_LOAD_SESSION_KEY) === "1") {
+      return;
+    }
+    await apiPost("/api/analytics/visit", { event_type: "app_load" });
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.setItem(APP_LOAD_SESSION_KEY, "1");
+    }
+  } catch {
+    /* ignore analytics failures */
+  }
 }

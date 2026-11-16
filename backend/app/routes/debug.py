@@ -4,6 +4,8 @@ from sqlalchemy.orm import Session
 
 from app.models.database import check_db_connection, get_db
 from app.models.schemas import (
+    AnalyticsQuery,
+    AnalyticsVisit,
     FuelPriceProjection,
     Plant,
     PlantMetric,
@@ -75,4 +77,6 @@ def db_summary(db: Session = Depends(get_db)) -> dict:
         "plant_projections_rows": _count(PlantProjection),
         "plant_projections_with_stranded_gap": pp_with_gap,
         "plant_projections_with_current_cost": pp_with_cost,
+        "analytics_visits_rows": _count(AnalyticsVisit),
+        "analytics_queries_rows": _count(AnalyticsQuery),
     }
