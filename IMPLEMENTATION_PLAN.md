@@ -1030,7 +1030,9 @@ VITE_API_URL=http://localhost:8000
 
 ### Config as code (in repo)
 
-- `backend/railway.toml` — Nixpacks/Railpack build; `start.sh` runs `alembic upgrade head` then uvicorn.
+- `backend/railway.toml` — **`builder = "railpack"`** (Nixpacks is legacy); `start.sh` runs `alembic upgrade head` then uvicorn. The dashboard builder setting must match (RAILPACK); the file overrides it, so a mismatch is confusing but not fatal.
+- `backend/runtime.txt` — **`python-3.14`**. Railpack's `mise` verifies GitHub attestations for Python downloads and rejects old patch pins like `3.11.9`, so use a minor version (`python-3.14`). Python 3.15 was not usable at last check (no wheels for `uvicorn[standard]` deps); re-check before bumping.
+- Dependencies in `backend/requirements.txt` are **not pinned** (minimums only), so every rebuild can pull newer packages (this caused the Oct 2026 `temperature` outage with `anthropic` 1.15.0). If NL search or other routes break after a deploy, check package versions first.
 - `frontend/railway.toml` — **`builder = DOCKERFILE`** so the image uses **`frontend/Dockerfile`** (official `node:23-bookworm-slim`; Railway’s default **Railpack** was resolving to **Node 18**, which breaks Vite 8).
 - `frontend/Dockerfile` — multi-stage: `npm ci` → `npm run build` → `serve` on `$PORT`.
 
@@ -1039,6 +1041,12 @@ VITE_API_URL=http://localhost:8000
 - **Postgres:** plugin provides `DATABASE_URL` / `DATABASE_PUBLIC_URL` (internal vs TCP proxy).
 - **backend:** `DATABASE_URL` should **reference** the Postgres service (e.g. `${{Postgres.DATABASE_URL}}`). **`EIA_API_KEY`** must be set for EIA refresh scripts and debug routes. **`CORS_ORIGINS`** must include the exact frontend origin — production uses **`https://project-burnout.up.railway.app`** (or a variable reference like `${{frontend.RAILWAY_PUBLIC_DOMAIN}}` with `https://` if supported). **After changing the frontend public domain, redeploy the backend** so CORS picks up the new origin.
 - **frontend:** **`VITE_API_URL`** = backend public API base URL (often `${{backend.RAILWAY_PUBLIC_DOMAIN}}` with `https://` — confirm pattern in Railway variable UI). Mark as available at **build** time if the UI offers it.
+
+### Deploy source (current)
+
+- **backend** is connected to GitHub **`abrose1/ProjectBurnout`**, branch **`main`**, **Root Directory `/backend`**. **Every push to `main` auto-deploys the backend.** Roll back from the Railway dashboard (Deployments → previous deployment) if a push breaks production.
+- Before pushing, make sure local-only code (e.g. analytics routes, migrations) is committed. The deploy builds exactly what is on GitHub.
+- The CLI flow below still works for manual/one-off deploys, but avoid running it for changes you are also pushing (double deploy).
 
 ### CLI (from repo root, with [Railway CLI](https://docs.railway.com/guides/cli) installed)
 
@@ -1058,8 +1066,8 @@ railway up --path-as-root frontend
 - **`railway service <name>`** selects which service subsequent commands target.
 - **`railway up --path-as-root backend`** (or `frontend`) mirrors setting **Root Directory** in the UI for that service.
 - **Do not** run `cd backend && railway up`. The CLI archives from the *linked project directory* (the repo root), not your cwd, so Railpack sees the whole monorepo, finds no app, and the deploy fails with "Railpack could not determine how to build the app" (the previous deployment keeps serving). Always run from the repo root with `--path-as-root`.
-- `railway logs --build` with no deployment ID shows the last *successful* build, not a failed one. To debug a failed deploy, open the build log from the dashboard or pass its deployment ID.
-- If the repo is connected to GitHub with auto-deploy, **`git push`** may deploy without `railway up`; avoid doing both for every change or you may double-deploy.
+- `railway logs --build` with no deployment ID shows the last *successful* build, not a failed one. To debug a failed deploy, open the build log from the dashboard; the CLI and MCP log tools return nothing for failed builds. The Railway GraphQL `buildLogs(deploymentId:...)` query (with the CLI token in `~/.railway/config.json`) does return them.
+- The backend is connected to GitHub with auto-deploy, so **`git push`** deploys it without `railway up`; avoid doing both for the same change or you will double-deploy. The frontend is still deployed with `railway up --path-as-root frontend` unless you connect it too.
 
 Useful: `railway variables -s backend`, `railway domain`, `railway open` (opens dashboard; may require interactive session).
 

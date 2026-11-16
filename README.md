@@ -8,7 +8,7 @@ Early-warning tooling for US coal and gas power plants at risk of stranding befo
 
 ## Prerequisites
 
-- Python 3.11+ (project uses a `backend/.venv`)
+- Python 3.11+ (project uses a `backend/.venv`; production runs 3.14 via `backend/runtime.txt`)
 - **Postgres 16 via Homebrew** on macOS (see below)
 - [EIA Open Data API key](https://www.eia.gov/opendata/) for data refresh scripts
 
